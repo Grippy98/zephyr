@@ -71,6 +71,7 @@ zephyr_library_sources_ifdef(CONFIG_PWM_TEST pwm_test.c)
 zephyr_library_sources_ifdef(CONFIG_PWM_WCH_GPTM pwm_wch_gptm.c)
 zephyr_library_sources_ifdef(CONFIG_PWM_XEC pwm_mchp_xec.c)
 zephyr_library_sources_ifdef(CONFIG_PWM_XLNX_AXI_TIMER pwm_xlnx_axi_timer.c)
+zephyr_library_sources_ifdef(CONFIG_PWM_EHRPWM pwm_ehrpwm.c)
 zephyr_library_sources_ifdef(CONFIG_PWM_XMC4XXX_CCU4 pwm_xmc4xxx_ccu4.c)
 zephyr_library_sources_ifdef(CONFIG_PWM_XMC4XXX_CCU8 pwm_xmc4xxx_ccu8.c)
 # zephyr-keep-sorted-stop

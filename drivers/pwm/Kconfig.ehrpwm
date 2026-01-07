@@ -1,0 +1,9 @@
+# Copyright (c) 2024 Your Name
+# SPDX-License-Identifier: Apache-2.0
+
+config PWM_EHRPWM
+	bool "TI eHRPWM driver"
+	default y
+	depends on DT_HAS_TI_EHRPWM_ENABLED
+	help
+	  Enable driver for TI eHRPWM.
