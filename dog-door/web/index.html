@@ -59,7 +59,8 @@
           <button class="control-button close" data-door-command="close"><span>↓</span>Close door</button>
           <button class="control-button stop" data-door-command="stop"><span>!</span>Stop</button>
           <button class="control-button home" data-door-command="home"><span>⌂</span>Home door</button>
-          <p>Homing moves the door to the upper limit and establishes its reference position.</p>
+          <div class="home-target"><strong>Home toward</strong><div role="group" aria-label="Homing limit"><button type="button" data-home-target="upper">Upper limit</button><button type="button" data-home-target="lower">Lower limit</button></div></div>
+          <p id="home-help">Homing moves the door to the upper limit and establishes its reference position.</p>
         </div>
       </div>
 
@@ -125,7 +126,15 @@
   <dialog id="settings-dialog">
     <form method="dialog" class="dialog-card">
       <div class="dialog-heading"><div><p class="eyebrow">System</p><h2>Dog Door settings</h2></div><button aria-label="Close settings">×</button></div>
-      <dl><div><dt>Firmware safety</dt><dd id="settings-armed">Disarmed</dd></div><div><dt>Stepper driver</dt><dd id="settings-motor">Checking</dd></div><div><dt>IP address</dt><dd id="settings-ip">—</dd></div><div><dt>Uptime</dt><dd id="settings-uptime">—</dd></div></dl>
+      <dl><div><dt>Firmware version</dt><dd id="settings-version">—</dd></div><div><dt>Firmware safety</dt><dd id="settings-armed">Disarmed</dd></div><div><dt>Stepper driver</dt><dd id="settings-motor">Checking</dd></div><div><dt>IP address</dt><dd id="settings-ip">—</dd></div><div><dt>Uptime</dt><dd id="settings-uptime">—</dd></div></dl>
+      <section class="ota-card">
+        <div><h3>Firmware update</h3><strong id="ota-health">Checking rollback protection…</strong></div>
+        <p>Install a signed <code>zephyr.signed.bin</code> build. The door stops during upload and automatically rolls back if the new firmware does not start cleanly.</p>
+        <label class="firmware-picker"><span id="ota-file-name">Choose signed firmware</span><input id="ota-file" type="file" accept=".bin,application/octet-stream"></label>
+        <progress id="ota-progress" max="100" value="0" hidden></progress>
+        <p class="ota-status" id="ota-status" role="status"></p>
+        <button class="connect-button" id="ota-upload" type="button" disabled>Install and reboot</button>
+      </section>
       <button class="connect-button" type="button" data-view-button="network">Network &amp; Home Assistant</button>
     </form>
   </dialog>

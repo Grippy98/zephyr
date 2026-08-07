@@ -39,12 +39,34 @@ input, check winding current and motor/driver temperature, and tune
 faulted, so the lift must be mechanically self-locking or otherwise prevented
 from falling under gravity.
 
+The dashboard can persistently select either the upper or lower switch as the
+homing reference. A home command moves only toward the selected switch and
+records the corresponding open or closed state when that switch engages.
+
 ## Build and flash
 
+Generate a unique signing key once and keep a secure backup outside the Git
+repository:
+
 ```shell
-west build -b maker_esp32/esp32/procpu dog-door
-west flash
+imgtool keygen -k dog-door/keys/dog-door-signing.pem -t ecdsa-p256
+west build -b maker_esp32/esp32/procpu dog-door --sysbuild
+west flash -d build
 ```
+
+The first serial flash installs MCUboot and the signed application. Subsequent
+updates can be installed from **System → Firmware update** using the generated
+`zephyr.signed.bin` application image inside the sysbuild output directory.
+The WebUI streams that image to the secondary slot, stops door motion, and
+requests an MCUboot test boot. The previous image is retained through the swap;
+the new image confirms itself only after 30 seconds of healthy startup, so a
+failed update automatically rolls back on the next reboot.
+
+Only images signed with `dog-door/keys/dog-door-signing.pem` are accepted by
+the installed bootloader. The private key is ignored by Git. Losing it requires
+a new bootloader and application to be installed over serial. The dashboard is
+plain HTTP intended for a trusted local network; firmware authenticity does not
+replace normal network isolation.
 
 On first boot the device creates `DogDoor-Setup` with password `configureme`.
 Connect to it and open `http://192.168.4.1/`. Change the setup password in

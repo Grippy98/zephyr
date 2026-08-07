@@ -17,6 +17,7 @@ struct app_config_data {
 	uint16_t mqtt_port;
 	char mqtt_username[DOG_DOOR_MQTT_USERNAME_MAX + 1];
 	char mqtt_password[DOG_DOOR_MQTT_PASSWORD_MAX + 1];
+	bool home_to_upper;
 };
 
 int app_config_init(void);

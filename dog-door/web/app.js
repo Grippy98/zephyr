@@ -6,6 +6,8 @@ let selectedNetworkSecure = true;
 let selectedSsid = "";
 let formDirty = false;
 let pollTimer;
+let selectedFirmware = null;
+let otaUploadActive = false;
 
 function titleCase(value = "unknown") {
   return value.replace(/(^|_)([a-z])/g, (_, p, c) => `${p ? " " : ""}${c.toUpperCase()}`);
@@ -69,7 +71,7 @@ function renderNetworks(network) {
 
 function render(next) {
   state = next;
-  const { door, led, network, mqtt } = state;
+  const { door, led, network, mqtt, ota } = state;
   $$('[data-device-name]').forEach((node) => { node.textContent = state.deviceName; });
   $("#door-state").textContent = titleCase(door.state);
   setLimit("upper", door.upperLimit);
@@ -77,7 +79,7 @@ function render(next) {
   const moving = ["opening", "closing", "homing"].includes(door.state);
   $("#door-panel").classList.toggle("open", door.state === "open" || door.state === "opening");
   $("#door-panel").classList.toggle("moving", moving);
-  $("#activity-text").textContent = moving ? titleCase(door.state) : door.state === "fault" ? "Needs attention" : "Idle";
+  $("#activity-text").textContent = door.state === "homing" ? `Homing ${state.homeTarget}` : moving ? titleCase(door.state) : door.state === "fault" ? "Needs attention" : "Idle";
   $(".activity").classList.toggle("busy", moving);
   $("#state-seal").textContent = door.state === "fault" ? "!" : door.state === "open" ? "↑" : "▣";
   $("#limit-summary").textContent = door.upperLimit ? "Upper limit engaged" : door.lowerLimit ? "Lower limit engaged" : "Between limits";
@@ -88,6 +90,11 @@ function render(next) {
     const command = button.dataset.doorCommand;
     button.disabled = !door.actuatorArmed && command !== "stop" || moving && command !== "stop" || command === "open" && door.upperLimit || command === "close" && door.lowerLimit;
   });
+  $$('[data-home-target]').forEach((button) => {
+    button.classList.toggle("selected", button.dataset.homeTarget === state.homeTarget);
+    button.disabled = moving;
+  });
+  $("#home-help").textContent = `Homing moves the door to the ${state.homeTarget} limit and establishes its reference position.`;
   $("#brightness").value = led.brightness;
   $("#brightness-value").textContent = `${led.brightness}%`;
   const color = `#${[led.red, led.green, led.blue].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
@@ -100,6 +107,10 @@ function render(next) {
   $("#settings-motor").textContent = door.motorReady ? "Ready" : "Unavailable";
   $("#settings-ip").textContent = network.ip || "—";
   $("#settings-uptime").textContent = `${Math.floor(state.uptimeSeconds / 60)} minutes`;
+  $("#settings-version").textContent = ota.runningVersion;
+  $("#ota-health").textContent = ota.rebootPending ? "Update staged · rebooting" : ota.imageConfirmed ? "Rollback protection ready" : "Testing this firmware before confirmation";
+  $("#ota-health").classList.toggle("ready", ota.imageConfirmed && !ota.rebootPending);
+  $("#ota-upload").disabled = otaUploadActive || !selectedFirmware || !ota.imageConfirmed || ota.rebootPending;
   if (!formDirty) {
     selectedSsid = network.ssid || selectedSsid;
     $("#wifi-ssid").value = selectedSsid;
@@ -116,7 +127,12 @@ function render(next) {
 
 async function refresh() {
   try {
-    render(await api("/api/state"));
+    const next = await api("/api/state");
+    if (otaUploadActive && !next.ota.rebootPending) {
+      otaUploadActive = false;
+      $("#ota-status").textContent = next.ota.imageConfirmed ? "Firmware update is online and confirmed." : "New firmware is online and completing its 30-second rollback safety check.";
+    }
+    render(next);
   } catch (error) {
     $("#last-update").textContent = "device offline";
   }
@@ -126,6 +142,13 @@ async function commandDoor(command) {
   try {
     render(await api("/api/door", { method: "POST", body: JSON.stringify({ command }) }));
     showToast(`${titleCase(command)} command accepted`);
+  } catch (error) { showToast(error.message); }
+}
+
+async function setHomeTarget(target) {
+  try {
+    render(await api("/api/config", { method: "POST", body: JSON.stringify({ homeTarget: target }) }));
+    showToast(`Door will home toward the ${target} limit`);
   } catch (error) { showToast(error.message); }
 }
 
@@ -167,10 +190,64 @@ async function saveSetup(event) {
   }
 }
 
+function uploadFirmware() {
+  if (!selectedFirmware || otaUploadActive) return;
+  if (!selectedFirmware.name.toLowerCase().endsWith(".bin")) {
+    showToast("Choose the zephyr.signed.bin firmware file");
+    return;
+  }
+
+  otaUploadActive = true;
+  clearInterval(pollTimer);
+  const progress = $("#ota-progress");
+  const status = $("#ota-status");
+  const button = $("#ota-upload");
+  progress.hidden = false;
+  progress.value = 0;
+  status.classList.remove("error");
+  status.textContent = "Uploading signed firmware… Keep the door powered.";
+  button.disabled = true;
+
+  const request = new XMLHttpRequest();
+  request.open("POST", "/api/ota");
+  request.setRequestHeader("Content-Type", "application/octet-stream");
+  request.upload.addEventListener("progress", (event) => {
+    if (event.lengthComputable) {
+      progress.value = Math.round(event.loaded * 100 / event.total);
+      status.textContent = `Uploading signed firmware… ${progress.value}%`;
+    }
+  });
+  request.addEventListener("load", () => {
+    let payload = {};
+    try { payload = JSON.parse(request.responseText); } catch (_) { /* reboot may win the race */ }
+    if (request.status >= 200 && request.status < 300) {
+      progress.value = 100;
+      status.textContent = `Firmware ${payload.version || "update"} staged. Rebooting into a rollback-protected test boot…`;
+      showToast("Firmware uploaded; the door is rebooting");
+      setTimeout(() => { pollTimer = setInterval(refresh, 2000); refresh(); }, 7000);
+    } else {
+      otaUploadActive = false;
+      status.classList.add("error");
+      status.textContent = payload.error || `Upload failed (${request.status})`;
+      button.disabled = !selectedFirmware;
+      pollTimer = setInterval(refresh, 1000);
+    }
+  });
+  request.addEventListener("error", () => {
+    otaUploadActive = false;
+    status.classList.add("error");
+    status.textContent = "Upload connection failed. The existing firmware is still active.";
+    button.disabled = !selectedFirmware;
+    pollTimer = setInterval(refresh, 1000);
+  });
+  request.send(selectedFirmware);
+}
+
 $$('[data-view-button]').forEach((button) => button.addEventListener("click", () => {
   $("#settings-dialog").close(); setView(button.dataset.viewButton);
 }));
 $$('[data-door-command]').forEach((button) => button.addEventListener("click", () => commandDoor(button.dataset.doorCommand)));
+$$('[data-home-target]').forEach((button) => button.addEventListener("click", () => setHomeTarget(button.dataset.homeTarget)));
 $$('[data-led-mode]').forEach((button) => button.addEventListener("click", () => setLed(button.dataset.ledMode)));
 $("#brightness").addEventListener("input", (event) => { $("#brightness-value").textContent = `${event.target.value}%`; });
 $("#brightness").addEventListener("change", () => setLed(state?.led.mode || "status"));
@@ -185,6 +262,12 @@ $$('[data-toggle-password]').forEach((button) => button.addEventListener("click"
   button.textContent = input.type === "password" ? "Show" : "Hide";
 }));
 $$('[data-open-settings]').forEach((button) => button.addEventListener("click", () => $("#settings-dialog").showModal()));
+$("#ota-file").addEventListener("change", (event) => {
+  selectedFirmware = event.target.files[0] || null;
+  $("#ota-file-name").textContent = selectedFirmware ? `${selectedFirmware.name} · ${(selectedFirmware.size / 1024).toFixed(0)} KB` : "Choose signed firmware";
+  $("#ota-upload").disabled = !selectedFirmware || otaUploadActive || !state?.ota.imageConfirmed;
+});
+$("#ota-upload").addEventListener("click", uploadFirmware);
 
 setView(activeView);
 refresh();

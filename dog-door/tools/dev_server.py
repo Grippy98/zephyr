@@ -16,6 +16,7 @@ LOCK = threading.Lock()
 MOTION_TIMER = None
 STATE = {
     "deviceName": "Mudroom Door",
+    "homeTarget": "upper",
     "door": {"state": "closed", "upperLimit": False, "lowerLimit": True,
              "actuatorArmed": True, "motorReady": True, "fault": ""},
     "led": {"mode": "status", "red": 47, "green": 125, "blue": 74, "brightness": 70},
@@ -28,6 +29,9 @@ STATE = {
                 ]},
     "mqtt": {"enabled": True, "connected": True, "host": "homeassistant.local",
              "port": 1883, "username": "mqttuser"},
+    "ota": {"supported": True, "imageConfirmed": True, "uploading": False,
+            "rebootPending": False, "bytesReceived": 0, "runningVersion": "1.1.0",
+            "updateVersion": ""},
 }
 
 
@@ -44,6 +48,18 @@ def finish_motion(target):
         STATE["door"].update(state=target, upperLimit=target == "open",
                              lowerLimit=target == "closed")
         MOTION_TIMER = None
+
+
+def finish_ota_boot():
+    with LOCK:
+        STATE["ota"].update(imageConfirmed=False, rebootPending=False,
+                            runningVersion="1.1.0", updateVersion="")
+    threading.Timer(3, confirm_ota).start()
+
+
+def confirm_ota():
+    with LOCK:
+        STATE["ota"]["imageConfirmed"] = True
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -84,6 +100,27 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         global MOTION_TIMER
         path = urlparse(self.path).path
+
+        if path == "/api/ota":
+            length = int(self.headers.get("Content-Length", "0"))
+            self.rfile.read(length)
+            with LOCK:
+                if not STATE["ota"]["imageConfirmed"]:
+                    allowed = False
+                else:
+                    allowed = True
+                    STATE["door"]["state"] = "stopped"
+                    STATE["ota"].update(rebootPending=True, bytesReceived=length,
+                                        updateVersion="1.1.0+0")
+            if not allowed:
+                self.send_json({"ok": False, "error": "Current firmware is still completing its rollback safety check"}, 409)
+                return
+            self.send_json({"ok": True, "message": "Firmware staged for test boot",
+                            "version": "1.1.0+0", "bytesReceived": length,
+                            "rebooting": True})
+            threading.Timer(1.5, finish_ota_boot).start()
+            return
+
         data = self.read_json()
         with LOCK:
             if path == "/api/door":
@@ -91,7 +128,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if command in ("open", "close", "home"):
                     if MOTION_TIMER:
                         MOTION_TIMER.cancel()
-                    target = "open" if command in ("open", "home") else "closed"
+                    target = "open" if command == "open" or command == "home" and STATE["homeTarget"] == "upper" else "closed"
                     STATE["door"].update(state="homing" if command == "home" else f"{command}ing",
                                          upperLimit=False, lowerLimit=False)
                     MOTION_TIMER = threading.Timer(1.1, finish_motion, [target])
@@ -108,10 +145,16 @@ class Handler(SimpleHTTPRequestHandler):
                 STATE["led"].update(mode=data.get("mode", "status"), red=rgb[0], green=rgb[1],
                                     blue=rgb[2], brightness=int(data.get("brightness", 70)))
             elif path == "/api/config":
-                STATE["deviceName"] = data.get("deviceName", STATE["deviceName"])
-                STATE["mqtt"].update(enabled=bool(data.get("mqttEnabled")),
-                                     host=data.get("mqttHost", ""), port=int(data.get("mqttPort", 1883)),
-                                     username=data.get("mqttUsername", ""))
+                if "deviceName" in data:
+                    STATE["deviceName"] = data["deviceName"]
+                if data.get("homeTarget") in ("upper", "lower"):
+                    STATE["homeTarget"] = data["homeTarget"]
+                mqtt_values = {}
+                if "mqttEnabled" in data: mqtt_values["enabled"] = bool(data["mqttEnabled"])
+                if "mqttHost" in data: mqtt_values["host"] = data["mqttHost"]
+                if "mqttPort" in data: mqtt_values["port"] = int(data["mqttPort"])
+                if "mqttUsername" in data: mqtt_values["username"] = data["mqttUsername"]
+                STATE["mqtt"].update(**mqtt_values)
             elif path == "/api/wifi":
                 STATE["network"].update(ssid=data.get("ssid", ""), connecting=True, connected=False)
                 threading.Timer(1.2, self.connect_wifi).start()

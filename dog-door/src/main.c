@@ -4,6 +4,7 @@
 #include "led_controller.h"
 #include "mqtt_bridge.h"
 #include "network_manager.h"
+#include "ota_manager.h"
 #include "web_server.h"
 
 #include <zephyr/kernel.h>
@@ -14,34 +15,50 @@ LOG_MODULE_REGISTER(dog_door, CONFIG_DOG_DOOR_LOG_LEVEL);
 int main(void)
 {
 	int ret;
+	bool startup_healthy = true;
 
 	LOG_INF("Maker ESP32 Dog Door starting");
 	LOG_WRN("Actuator is compile-time %s",
 		IS_ENABLED(CONFIG_DOG_DOOR_ACTUATOR_ARMED) ? "ARMED" : "DISARMED");
 
+	ret = ota_manager_init();
+	if (ret != 0) {
+		LOG_ERR("OTA initialization failed: %d", ret);
+		startup_healthy = false;
+	}
 	ret = app_config_init();
 	if (ret != 0) {
 		LOG_ERR("Configuration initialization failed: %d", ret);
+		startup_healthy = false;
 	}
 	ret = door_controller_init();
 	if (ret != 0) {
 		LOG_ERR("Door controller initialization failed: %d", ret);
+		startup_healthy = false;
 	}
 	ret = led_controller_init();
 	if (ret != 0) {
 		LOG_ERR("LED controller initialization failed: %d", ret);
+		startup_healthy = false;
 	}
 	ret = network_manager_init();
 	if (ret != 0) {
 		LOG_ERR("Network initialization failed: %d", ret);
+		startup_healthy = false;
 	}
 	ret = web_server_init();
 	if (ret != 0) {
 		LOG_ERR("Web server initialization failed: %d", ret);
+		startup_healthy = false;
 	}
 	ret = mqtt_bridge_init();
 	if (ret != 0) {
 		LOG_ERR("MQTT initialization failed: %d", ret);
+	}
+	if (startup_healthy) {
+		ota_manager_mark_healthy();
+	} else {
+		LOG_ERR("Startup health check failed; an OTA test image will not be confirmed");
 	}
 
 	while (true) {

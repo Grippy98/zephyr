@@ -14,6 +14,7 @@ target_sources(app PRIVATE
   src/main.c
   src/mqtt_bridge.c
   src/network_manager.c
+  src/ota_manager.c
   src/web_server.c
 )
 

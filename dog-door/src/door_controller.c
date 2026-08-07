@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 #include "door_controller.h"
 
+#include "app_config.h"
+
 #include <errno.h>
 #include <string.h>
 #include <zephyr/devicetree.h>
@@ -47,6 +49,7 @@ static bool lower_raw;
 static int64_t upper_changed_at;
 static int64_t lower_changed_at;
 static int64_t motion_started_at;
+static bool homing_to_upper = true;
 static struct k_work_delayable monitor_work;
 static struct k_thread stepper_thread_data;
 static struct k_sem stepper_wake;
@@ -269,10 +272,12 @@ static void monitor_handler(struct k_work *work)
 	}
 
 	if ((state.state == DOOR_STATE_OPENING && state.upper_limit) ||
-	    (state.state == DOOR_STATE_HOMING && state.upper_limit)) {
+	    (state.state == DOOR_STATE_HOMING && homing_to_upper && state.upper_limit)) {
 		stop_locked(DOOR_STATE_OPEN);
 		state.fault[0] = '\0';
-	} else if (state.state == DOOR_STATE_CLOSING && state.lower_limit) {
+	} else if ((state.state == DOOR_STATE_CLOSING && state.lower_limit) ||
+		   (state.state == DOOR_STATE_HOMING && !homing_to_upper &&
+		    state.lower_limit)) {
 		stop_locked(DOOR_STATE_CLOSED);
 		state.fault[0] = '\0';
 	} else if (is_moving(state.state) && motion_started_at > 0 &&
@@ -343,6 +348,7 @@ int door_controller_init(void)
 
 int door_controller_command(enum door_command command)
 {
+	struct app_config_data config;
 	int ret = 0;
 	int direction = 0;
 	enum door_state next_state = DOOR_STATE_STOPPED;
@@ -385,12 +391,15 @@ int door_controller_command(enum door_command command)
 		next_state = DOOR_STATE_CLOSING;
 		break;
 	case DOOR_COMMAND_HOME:
-		if (state.upper_limit) {
-			state.state = DOOR_STATE_OPEN;
+		app_config_get(&config);
+		homing_to_upper = config.home_to_upper;
+		if ((homing_to_upper && state.upper_limit) ||
+		    (!homing_to_upper && state.lower_limit)) {
+			state.state = homing_to_upper ? DOOR_STATE_OPEN : DOOR_STATE_CLOSED;
 			bump_generation();
 			goto out;
 		}
-		direction = 1;
+		direction = homing_to_upper ? 1 : -1;
 		next_state = DOOR_STATE_HOMING;
 		break;
 	default:

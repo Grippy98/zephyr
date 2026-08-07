@@ -6,6 +6,7 @@
 #include "led_controller.h"
 #include "mqtt_bridge.h"
 #include "network_manager.h"
+#include "ota_manager.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -36,6 +37,13 @@ struct api_context {
 	uint8_t body[API_BODY_MAX];
 	size_t cursor;
 	uint8_t response[API_RESPONSE_MAX];
+};
+
+struct ota_http_context {
+	bool started;
+	bool staged;
+	int error;
+	uint8_t response[256];
 };
 
 static uint8_t index_html_gz[] = {
@@ -184,6 +192,7 @@ static int state_response(struct api_context *context)
 	struct network_snapshot network;
 	struct mqtt_bridge_snapshot mqtt;
 	struct app_config_data config;
+	struct ota_snapshot ota;
 	char scan_json[1024];
 
 	door_controller_get(&door);
@@ -191,9 +200,11 @@ static int state_response(struct api_context *context)
 	network_manager_get(&network);
 	mqtt_bridge_get(&mqtt);
 	app_config_get(&config);
+	ota_manager_get(&ota);
 	write_scan_json(scan_json, sizeof(scan_json), &network);
 	return snprintk(context->response, sizeof(context->response),
 		"{\"deviceName\":\"%s\",\"uptimeSeconds\":%lld,"
+		"\"homeTarget\":\"%s\","
 		"\"door\":{\"state\":\"%s\",\"upperLimit\":%s,\"lowerLimit\":%s,"
 		"\"actuatorArmed\":%s,\"motorReady\":%s,\"fault\":\"%s\"},"
 		"\"led\":{\"mode\":\"%s\",\"red\":%u,\"green\":%u,\"blue\":%u,"
@@ -202,8 +213,12 @@ static int state_response(struct api_context *context)
 		"\"scanning\":%s,\"ssid\":\"%s\",\"ip\":\"%s\",\"rssi\":%d,"
 		"\"setupSsid\":\"%s\",\"scan\":%s},"
 		"\"mqtt\":{\"enabled\":%s,\"connected\":%s,\"host\":\"%s\","
-		"\"port\":%u,\"username\":\"%s\"}}",
+		"\"port\":%u,\"username\":\"%s\"},"
+		"\"ota\":{\"supported\":true,\"imageConfirmed\":%s,"
+		"\"uploading\":%s,\"rebootPending\":%s,\"bytesReceived\":%zu,"
+		"\"runningVersion\":\"%s\",\"updateVersion\":\"%s\"}}",
 		config.device_name, k_uptime_get() / 1000,
+		config.home_to_upper ? "upper" : "lower",
 		door_state_name(door.state), door.upper_limit ? "true" : "false",
 		door.lower_limit ? "true" : "false", door.actuator_armed ? "true" : "false",
 		door.motor_ready ? "true" : "false", door.fault, led_mode_name(led.mode),
@@ -213,7 +228,10 @@ static int state_response(struct api_context *context)
 		network.ssid, network.ip_address, network.rssi, CONFIG_DOG_DOOR_SETUP_AP_SSID,
 		scan_json, config.mqtt_enabled ? "true" : "false",
 		mqtt.connected ? "true" : "false", config.mqtt_host, config.mqtt_port,
-		config.mqtt_username);
+		config.mqtt_username, ota.image_confirmed ? "true" : "false",
+		ota.upload_in_progress ? "true" : "false",
+		ota.reboot_pending ? "true" : "false", ota.bytes_received,
+		ota.running_version, ota.update_version);
 }
 
 static int handle_door(const char *json)
@@ -331,7 +349,91 @@ static int handle_config(const char *json)
 	    temporary[0] != '\0') {
 		strncpy(config.mqtt_password, temporary, sizeof(config.mqtt_password) - 1);
 	}
+	if (json_string(json, "homeTarget", temporary, sizeof(temporary))) {
+		if (strcmp(temporary, "upper") == 0) {
+			config.home_to_upper = true;
+		} else if (strcmp(temporary, "lower") == 0) {
+			config.home_to_upper = false;
+		} else {
+			return -EINVAL;
+		}
+	}
 	return app_config_set(&config);
+}
+
+static int ota_handler(struct http_client_ctx *client,
+		       enum http_transaction_status status,
+		       const struct http_request_ctx *request_ctx,
+		       struct http_response_ctx *response_ctx, void *user_data)
+{
+	struct ota_http_context *context = user_data;
+	struct ota_snapshot ota;
+	const char *message;
+	int response_len;
+
+	if (status == HTTP_SERVER_TRANSACTION_ABORTED) {
+		if (context->started && !context->staged) {
+			ota_manager_abort();
+		}
+		memset(context, 0, sizeof(*context));
+		return 0;
+	}
+	if (status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+		if (context->staged) {
+			ota_manager_response_sent();
+		}
+		memset(context, 0, sizeof(*context));
+		return 0;
+	}
+	if (client->method != HTTP_POST) {
+		context->error = -ENOTSUP;
+	}
+
+	if (!context->started && context->error == 0) {
+		context->error = ota_manager_begin();
+		context->started = context->error == 0;
+	}
+	if (context->started && context->error == 0) {
+		context->error = ota_manager_write(request_ctx->data,
+			request_ctx->data_len, status == HTTP_SERVER_REQUEST_DATA_FINAL);
+		if (context->error != 0) {
+			ota_manager_abort();
+			context->started = false;
+		}
+	}
+	if (status != HTTP_SERVER_REQUEST_DATA_FINAL) {
+		return 0;
+	}
+
+	response_ctx->headers = json_header;
+	response_ctx->header_count = ARRAY_SIZE(json_header);
+	response_ctx->final_chunk = true;
+	if (context->error == 0) {
+		ota_manager_get(&ota);
+		response_len = snprintk(context->response, sizeof(context->response),
+			"{\"ok\":true,\"message\":\"Firmware staged for test boot\","
+			"\"version\":\"%s\",\"bytesReceived\":%zu,\"rebooting\":true}",
+			ota.update_version, ota.bytes_received);
+		response_ctx->status = HTTP_200_OK;
+		context->staged = true;
+	} else {
+		message = context->error == -EAGAIN ?
+			"Current firmware is still completing its rollback safety check" :
+			(context->error == -EBADMSG ?
+			 "Select the zephyr.signed.bin file from a Dog Door sysbuild" :
+			 (context->error == -ENOMEM || context->error == -ERANGE ?
+			  "Firmware image is larger than the update slot" :
+			  "Firmware update could not be staged"));
+		response_len = snprintk(context->response, sizeof(context->response),
+			"{\"ok\":false,\"error\":\"%s\",\"code\":%d}",
+			message, context->error);
+		response_ctx->status = context->error == -EBADMSG ? HTTP_400_BAD_REQUEST :
+			(context->error == -ENOMEM || context->error == -ERANGE ?
+			 HTTP_413_PAYLOAD_TOO_LARGE : HTTP_409_CONFLICT);
+	}
+	response_ctx->body = context->response;
+	response_ctx->body_len = MAX(response_len, 0);
+	return 0;
 }
 
 static int api_handler(struct http_client_ctx *client,
@@ -420,6 +522,16 @@ API_RESOURCE(wifi_scan, API_WIFI_SCAN, BIT(HTTP_GET));
 API_RESOURCE(wifi, API_WIFI, BIT(HTTP_POST));
 API_RESOURCE(config, API_CONFIG, BIT(HTTP_GET) | BIT(HTTP_POST));
 
+static struct ota_http_context ota_context;
+static struct http_resource_detail_dynamic ota_detail = {
+	.common = {
+		.type = HTTP_RESOURCE_TYPE_DYNAMIC,
+		.bitmask_of_supported_http_methods = BIT(HTTP_POST),
+	},
+	.cb = ota_handler,
+	.user_data = &ota_context,
+};
+
 static uint16_t port = CONFIG_DOG_DOOR_HTTP_PORT;
 HTTP_SERVICE_DEFINE(dog_door_service, NULL, &port, CONFIG_HTTP_SERVER_MAX_CLIENTS,
 		    10, NULL, NULL, NULL);
@@ -434,6 +546,7 @@ HTTP_RESOURCE_DEFINE(led_resource, dog_door_service, "/api/led", &led_detail);
 HTTP_RESOURCE_DEFINE(wifi_scan_resource, dog_door_service, "/api/wifi/scan", &wifi_scan_detail);
 HTTP_RESOURCE_DEFINE(wifi_resource, dog_door_service, "/api/wifi", &wifi_detail);
 HTTP_RESOURCE_DEFINE(config_resource, dog_door_service, "/api/config", &config_detail);
+HTTP_RESOURCE_DEFINE(ota_resource, dog_door_service, "/api/ota", &ota_detail);
 
 int web_server_init(void)
 {
