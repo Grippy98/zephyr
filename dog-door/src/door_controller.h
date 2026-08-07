@@ -28,7 +28,7 @@ struct door_snapshot {
 	bool upper_limit;
 	bool lower_limit;
 	bool actuator_armed;
-	bool servo_ready;
+	bool motor_ready;
 	char fault[64];
 	uint32_t generation;
 };

@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+
+description: Four-input bipolar stepper motor driven through PWM H-bridges.
+
+compatible: "pwm-stepper"
+
+include: base.yaml
+
+properties:
+  pwms:
+    required: true
+    type: phandle-array
+    description: A+, A-, B+, and B- PWM outputs, in that order.

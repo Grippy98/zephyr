@@ -97,7 +97,7 @@ function render(next) {
   $("#mqtt-status").textContent = mqtt.connected ? "Online" : mqtt.enabled ? "Connecting…" : "Not configured";
   $("#setup-status").textContent = network.connected ? `Connected to ${network.ssid}` : network.apActive ? "Setup access point active" : "Waiting for Wi‑Fi";
   $("#settings-armed").textContent = door.actuatorArmed ? "Armed" : "Disarmed";
-  $("#settings-servo").textContent = door.servoReady ? "Ready" : "Unavailable";
+  $("#settings-motor").textContent = door.motorReady ? "Ready" : "Unavailable";
   $("#settings-ip").textContent = network.ip || "—";
   $("#settings-uptime").textContent = `${Math.floor(state.uptimeSeconds / 60)} minutes`;
   if (!formDirty) {

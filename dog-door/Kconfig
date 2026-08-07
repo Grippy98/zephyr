@@ -6,35 +6,38 @@ mainmenu "Dog Door"
 menu "Dog Door application"
 
 config DOG_DOOR_ACTUATOR_ARMED
-	bool "Allow the firmware to move the door servo"
+	bool "Allow the firmware to energize the door stepper motor"
 	help
-	  Keep this disabled until the limit switches, servo direction, neutral
-	  pulse, travel pulses, and mechanical travel timeout are verified.
+	  Keep this disabled until the limit switches, motor phases, opening
+	  direction, drive duty, step rate, and mechanical timeout are verified.
 
-config DOG_DOOR_SERVO_PERIOD_US
-	int "Servo PWM period in microseconds"
-	default 20000
-	range 10000 30000
+config DOG_DOOR_STEPPER_DRIVE_PERCENT
+	int "Moving stepper PWM duty percentage"
+	default 50
+	range 10 100
+	help
+	  This board does not expose an adjustable 3D-printer-style current limit.
+	  Start with a 6 V motor supply and increase this value only after checking
+	  winding current and motor/driver temperature.
 
-config DOG_DOOR_SERVO_STOP_US
-	int "Continuous-rotation servo stop pulse in microseconds"
-	default 1500
-	range 500 2500
+config DOG_DOOR_STEPPER_STEP_INTERVAL_US
+	int "Delay between half-steps in microseconds"
+	default 1250
+	range 625 10000
+	help
+	  The default is 800 half-steps per second. Increase the interval to gain
+	  low-speed torque or reduce it only after confirming reliable motion.
 
-config DOG_DOOR_SERVO_OPEN_US
-	int "Door-opening servo pulse in microseconds"
-	default 1700
-	range 500 2500
-
-config DOG_DOOR_SERVO_CLOSE_US
-	int "Door-closing servo pulse in microseconds"
-	default 1300
-	range 500 2500
+config DOG_DOOR_STEPPER_INVERT_DIRECTION
+	bool "Reverse the stepper opening direction"
+	help
+	  Enable this if an open command moves the mechanism toward the lower
+	  limit. Swapping either winding pair has the same physical effect.
 
 config DOG_DOOR_TRAVEL_TIMEOUT_MS
 	int "Maximum door travel time in milliseconds"
-	default 15000
-	range 1000 60000
+	default 30000
+	range 1000 120000
 
 config DOG_DOOR_LIMIT_DEBOUNCE_MS
 	int "Limit switch debounce time in milliseconds"

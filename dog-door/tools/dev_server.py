@@ -17,7 +17,7 @@ MOTION_TIMER = None
 STATE = {
     "deviceName": "Mudroom Door",
     "door": {"state": "closed", "upperLimit": False, "lowerLimit": True,
-             "actuatorArmed": True, "servoReady": True, "fault": ""},
+             "actuatorArmed": True, "motorReady": True, "fault": ""},
     "led": {"mode": "status", "red": 47, "green": 125, "blue": 74, "brightness": 70},
     "network": {"apActive": True, "connected": True, "connecting": False,
                 "scanning": False, "ssid": "HomeNet", "ip": "192.168.1.82", "rssi": -48,

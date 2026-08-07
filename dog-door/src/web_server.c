@@ -195,7 +195,7 @@ static int state_response(struct api_context *context)
 	return snprintk(context->response, sizeof(context->response),
 		"{\"deviceName\":\"%s\",\"uptimeSeconds\":%lld,"
 		"\"door\":{\"state\":\"%s\",\"upperLimit\":%s,\"lowerLimit\":%s,"
-		"\"actuatorArmed\":%s,\"servoReady\":%s,\"fault\":\"%s\"},"
+		"\"actuatorArmed\":%s,\"motorReady\":%s,\"fault\":\"%s\"},"
 		"\"led\":{\"mode\":\"%s\",\"red\":%u,\"green\":%u,\"blue\":%u,"
 		"\"brightness\":%u},"
 		"\"network\":{\"apActive\":%s,\"connected\":%s,\"connecting\":%s,"
@@ -206,7 +206,7 @@ static int state_response(struct api_context *context)
 		config.device_name, k_uptime_get() / 1000,
 		door_state_name(door.state), door.upper_limit ? "true" : "false",
 		door.lower_limit ? "true" : "false", door.actuator_armed ? "true" : "false",
-		door.servo_ready ? "true" : "false", door.fault, led_mode_name(led.mode),
+		door.motor_ready ? "true" : "false", door.fault, led_mode_name(led.mode),
 		led.red, led.green, led.blue, led.brightness,
 		network.ap_active ? "true" : "false", network.connected ? "true" : "false",
 		network.connecting ? "true" : "false", network.scanning ? "true" : "false",
