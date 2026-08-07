@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#174b2d">
+  <title>Dog Door</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Dog Door dashboard">
+      <span class="door-mark" aria-hidden="true"></span>
+      <strong>Dog Door</strong>
+    </a>
+    <span class="device-name" data-device-name>Mudroom Door</span>
+    <nav aria-label="Primary navigation">
+      <button class="nav-button active" data-view-button="dashboard"><span>▥</span> Door</button>
+      <button class="nav-button" data-view-button="lights"><span>☼</span> Lights</button>
+      <button class="nav-button" data-view-button="network"><span>⌁</span> Network</button>
+      <button class="nav-button" data-view-button="assistant"><span>⌂</span> Home Assistant</button>
+      <button class="nav-button" data-open-settings><span>⚙</span> System</button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="safety-banner" id="safety-banner" hidden>
+      <span class="banner-icon">!</span>
+      <div><strong>Safe commissioning mode</strong><br><span>The actuator is disarmed in this firmware build. Controls can be reviewed, but the servo cannot move.</span></div>
+    </section>
+
+    <section class="dashboard-view" data-view="dashboard">
+      <div class="door-card panel">
+        <div class="door-visual-column">
+          <div class="limit-label upper-label">
+            <strong>Upper limit</strong><span><i data-limit-dot="upper"></i><em data-limit-text="upper">Not engaged</em></span>
+          </div>
+          <div class="door-rig" aria-hidden="true">
+            <div class="door-header"></div><div class="door-post left"></div><div class="door-post right"></div>
+            <div class="door-panel" id="door-panel"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+            <div class="door-floor"></div>
+          </div>
+          <div class="limit-label lower-label">
+            <strong>Lower limit</strong><span><i data-limit-dot="lower"></i><em data-limit-text="lower">Engaged</em></span>
+          </div>
+        </div>
+
+        <div class="door-state-column">
+          <p class="eyebrow">Door position</p>
+          <h1 id="door-state">Closed</h1>
+          <div class="state-seal" id="state-seal" aria-hidden="true">▣</div>
+          <strong class="limit-summary" id="limit-summary">Lower limit engaged</strong>
+          <div class="activity"><span>Activity</span><strong><i></i><span id="activity-text">Idle</span></strong></div>
+          <p class="fault-text" id="fault-text" hidden></p>
+        </div>
+
+        <div class="door-actions" aria-label="Door controls">
+          <button class="control-button open" data-door-command="open"><span>↑</span>Open door</button>
+          <button class="control-button close" data-door-command="close"><span>↓</span>Close door</button>
+          <button class="control-button stop" data-door-command="stop"><span>!</span>Stop</button>
+          <button class="control-button home" data-door-command="home"><span>⌂</span>Home door</button>
+          <p>Homing moves the door to the upper limit and establishes its reference position.</p>
+        </div>
+      </div>
+
+      <div class="led-card panel">
+        <div class="section-label"><span class="round-icon">☼</span><strong>LED controls</strong></div>
+        <div class="segmented-group"><label>Door lights</label><div><button data-led-mode="solid">Solid</button><button data-led-mode="off">Off</button></div></div>
+        <div class="segmented-group"><label>Status</label><div><button class="selected" data-led-mode="status">Status</button><input id="led-color" type="color" value="#2f7d4a" aria-label="LED color"></div></div>
+        <div class="brightness"><label for="brightness">Brightness</label><div><span>☼</span><input id="brightness" type="range" min="0" max="100" value="70"><strong id="brightness-value">70%</strong></div></div>
+      </div>
+
+      <div class="connectivity-card panel">
+        <div class="connection-item"><span class="connection-icon">⌁</span><div><span>Wi‑Fi</span><strong id="wifi-status">Setup mode</strong></div></div>
+        <div class="connection-item"><span class="connection-icon">⌂</span><div><span>Home Assistant</span><strong id="mqtt-status">Not configured</strong></div></div>
+        <button class="settings-link" data-open-settings><span>⚙</span> Settings <b>›</b></button>
+      </div>
+      <p class="last-update">Last update: <span id="last-update">waiting for device</span></p>
+    </section>
+
+    <section class="setup-view" data-view="network" hidden>
+      <div class="setup-heading"><button class="back-button" data-view-button="dashboard" aria-label="Back to dashboard">←</button><span class="door-mark"></span></div>
+      <div class="setup-content">
+        <p class="eyebrow">Network provisioning</p>
+        <h1>Set up Dog Door</h1>
+        <p class="setup-intro">Connect this door to your home network.</p>
+        <form id="setup-form">
+          <fieldset>
+            <legend>Wi‑Fi network <span class="rule"></span></legend>
+            <div class="network-list" id="network-list"><div class="network-placeholder">Scanning for nearby networks…</div></div>
+            <label class="field"><span>Network name</span><input id="wifi-ssid" name="ssid" maxlength="32" autocomplete="username" required></label>
+            <label class="field password-field"><span>Wi‑Fi password</span><input id="wifi-password" name="password" type="password" maxlength="64" autocomplete="current-password"><button type="button" data-toggle-password="wifi-password">Show</button></label>
+          </fieldset>
+          <fieldset>
+            <legend>Device <span class="rule"></span></legend>
+            <label class="field"><span>Device name</span><input id="device-name" name="deviceName" maxlength="32" value="Mudroom Door" required></label>
+          </fieldset>
+          <fieldset>
+            <legend>Home Assistant <span class="rule"></span></legend>
+            <label class="toggle-row"><span>Enable MQTT discovery</span><input id="mqtt-enabled" type="checkbox" role="switch"></label>
+            <div id="mqtt-fields">
+              <label class="field"><span>MQTT broker</span><input id="mqtt-host" maxlength="64" placeholder="homeassistant.local"></label>
+              <div class="field-pair"><label class="field"><span>Port</span><input id="mqtt-port" type="number" min="1" max="65535" value="1883"></label><label class="field"><span>Username</span><input id="mqtt-username" maxlength="32" autocomplete="username"></label></div>
+              <label class="field password-field"><span>Password</span><input id="mqtt-password" type="password" maxlength="64" autocomplete="current-password" placeholder="Leave blank to keep existing"><button type="button" data-toggle-password="mqtt-password">Show</button></label>
+            </div>
+          </fieldset>
+          <div class="form-message" id="form-message" role="status"></div>
+          <button class="connect-button" type="submit"><span>⌁</span>Save and connect</button>
+          <button class="scan-button" type="button" id="scan-button"><span>⟳</span>Scan again</button>
+        </form>
+        <div class="setup-status"><i></i><strong id="setup-status">Setup access point active</strong><span>Your passwords stay on this device.</span></div>
+      </div>
+    </section>
+
+    <section class="simple-view panel" data-view="lights" hidden>
+      <p class="eyebrow">Lighting</p><h1>Door lights</h1><p>Set the onboard LEDs from the dashboard controls. Status mode follows door position: green closed, blue open, amber moving, and red on fault.</p>
+      <button class="control-button home compact" data-view-button="dashboard">Back to dashboard</button>
+    </section>
+    <section class="simple-view panel" data-view="assistant" hidden>
+      <p class="eyebrow">Home Assistant</p><h1>MQTT Discovery</h1><p>The door publishes a cover, RGB light, both limit switches, and availability. Configure your MQTT broker under Network or Settings.</p>
+      <button class="control-button home compact" data-view-button="network">Configure connection</button>
+    </section>
+  </main>
+
+  <dialog id="settings-dialog">
+    <form method="dialog" class="dialog-card">
+      <div class="dialog-heading"><div><p class="eyebrow">System</p><h2>Dog Door settings</h2></div><button aria-label="Close settings">×</button></div>
+      <dl><div><dt>Firmware safety</dt><dd id="settings-armed">Disarmed</dd></div><div><dt>Servo driver</dt><dd id="settings-servo">Checking</dd></div><div><dt>IP address</dt><dd id="settings-ip">—</dd></div><div><dt>Uptime</dt><dd id="settings-uptime">—</dd></div></dl>
+      <button class="connect-button" type="button" data-view-button="network">Network &amp; Home Assistant</button>
+    </form>
+  </dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

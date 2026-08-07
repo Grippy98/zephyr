@@ -1,0 +1,46 @@
+/*
+ * Copyright (c) 2026 Andrei Aldea
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/pwm/pwm.h>
+
+/ {
+	chosen {
+		zephyr,settings-partition = &storage_partition;
+	};
+
+	aliases {
+		upper-limit-switch = &upper_limit_switch;
+		lower-limit-switch = &lower_limit_switch;
+	};
+
+	limit_switches: limit-switches {
+		compatible = "gpio-keys";
+
+		/*
+		 * ESP32 GPIO34 and GPIO35 are input-only and have no internal
+		 * pull resistors. Fit an external 10 kOhm pull-up to 3.3 V for
+		 * each input and wire each normally-open switch to ground.
+		 */
+		upper_limit_switch: upper-limit-switch {
+			gpios = <&gpio1 2 GPIO_ACTIVE_LOW>;
+			label = "Upper limit switch";
+		};
+
+		lower_limit_switch: lower-limit-switch {
+			gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
+			label = "Lower limit switch";
+		};
+	};
+
+	servo: door-servo {
+		compatible = "pwm-servo";
+		/* Servo header 1: LEDC high-speed channel 8 on GPIO32. */
+		pwms = <&ledc0 8 PWM_USEC(20000) PWM_POLARITY_NORMAL>;
+		min-pulse = <PWM_USEC(500)>;
+		max-pulse = <PWM_USEC(2500)>;
+	};
+};

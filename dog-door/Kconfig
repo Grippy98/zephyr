@@ -1,0 +1,67 @@
+# Copyright (c) 2026 Andrei Aldea
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "Dog Door"
+
+menu "Dog Door application"
+
+config DOG_DOOR_ACTUATOR_ARMED
+	bool "Allow the firmware to move the door servo"
+	help
+	  Keep this disabled until the limit switches, servo direction, neutral
+	  pulse, travel pulses, and mechanical travel timeout are verified.
+
+config DOG_DOOR_SERVO_PERIOD_US
+	int "Servo PWM period in microseconds"
+	default 20000
+	range 10000 30000
+
+config DOG_DOOR_SERVO_STOP_US
+	int "Continuous-rotation servo stop pulse in microseconds"
+	default 1500
+	range 500 2500
+
+config DOG_DOOR_SERVO_OPEN_US
+	int "Door-opening servo pulse in microseconds"
+	default 1700
+	range 500 2500
+
+config DOG_DOOR_SERVO_CLOSE_US
+	int "Door-closing servo pulse in microseconds"
+	default 1300
+	range 500 2500
+
+config DOG_DOOR_TRAVEL_TIMEOUT_MS
+	int "Maximum door travel time in milliseconds"
+	default 15000
+	range 1000 60000
+
+config DOG_DOOR_LIMIT_DEBOUNCE_MS
+	int "Limit switch debounce time in milliseconds"
+	default 40
+	range 10 500
+
+config DOG_DOOR_SETUP_AP_SSID
+	string "Provisioning access point SSID"
+	default "DogDoor-Setup"
+
+config DOG_DOOR_SETUP_AP_PASSWORD
+	string "Provisioning access point password"
+	default "configureme"
+	help
+	  Change this before deploying the device. WPA2 requires at least eight
+	  characters.
+
+config DOG_DOOR_HTTP_PORT
+	int "HTTP server port"
+	default 80
+	range 1 65535
+
+config DOG_DOOR_LOG_LEVEL
+	int "Application log level"
+	default 3
+	range 0 4
+
+endmenu
+
+source "Kconfig.zephyr"
