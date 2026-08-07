@@ -17,13 +17,14 @@ The default application overlay assumes:
 | Function | Connection | Electrical requirement |
 | --- | --- | --- |
 | Stepper | Stepper 1 connector / M1+M2 / GPIO27, 13, 4, 2 | Four-wire bipolar NEMA 17; commission with a 6 V motor supply |
-| Upper limit | ADC header GPIO34 | External 10 kOhm pull-up to 3.3 V; switch closes to ground |
-| Lower limit | ADC header GPIO35 | External 10 kOhm pull-up to 3.3 V; switch closes to ground |
+| Upper limit | Servo 1 signal / GPIO32 | Internal pull-up; switch closes to ground |
+| Lower limit | Servo 2 signal / GPIO33 | Internal pull-up; switch closes to ground |
 | LEDs | Four onboard WS2812 LEDs / GPIO16 | Provided by the board definition |
 
-GPIO34 and GPIO35 do not have internal pull resistors. Never operate the door
-with floating limit inputs. Change `boards/maker_esp32_procpu.overlay` if the
-actual wiring differs.
+Connect each limit switch between its servo header's signal and ground pins;
+leave the 5 V pin unconnected. The application overlay reserves GPIO32 and
+GPIO33 as internally pulled-up inputs instead of servo PWM outputs. Change
+`boards/maker_esp32_procpu.overlay` if the actual wiring differs.
 
 The default actuator profile targets the common Ender-3-style 42 mm bipolar
 stepper: 1.8 degrees per full step, half-step sequencing, 800 half-steps per

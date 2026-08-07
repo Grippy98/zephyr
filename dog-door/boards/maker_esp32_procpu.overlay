@@ -5,6 +5,7 @@
  */
 
 #include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/pinctrl/esp32-pinctrl.h>
 #include <zephyr/dt-bindings/pwm/pwm.h>
 
 / {
@@ -21,17 +22,17 @@
 		compatible = "gpio-keys";
 
 		/*
-		 * ESP32 GPIO34 and GPIO35 are input-only and have no internal
-		 * pull resistors. Fit an external 10 kOhm pull-up to 3.3 V for
-		 * each input and wire each normally-open switch to ground.
+		 * Reuse the Servo 1 and Servo 2 signal pins as inputs. Both pins
+		 * support internal pull-ups, so each normally-open switch only
+		 * needs to connect its signal pin to ground.
 		 */
 		upper_limit_switch: upper-limit-switch {
-			gpios = <&gpio1 2 GPIO_ACTIVE_LOW>;
+			gpios = <&gpio1 0 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
 			label = "Upper limit switch";
 		};
 
 		lower_limit_switch: lower-limit-switch {
-			gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
+			gpios = <&gpio1 1 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
 			label = "Lower limit switch";
 		};
 	};
@@ -44,4 +45,21 @@
 		       <&ledc0 2 PWM_USEC(50) PWM_POLARITY_NORMAL>,
 		       <&ledc0 3 PWM_USEC(50) PWM_POLARITY_NORMAL>;
 	};
+};
+
+&pinctrl {
+	dog_door_ledc: dog-door-ledc {
+		group1 {
+			/* Only M1 and M2 are used; keep the servo pins as GPIO inputs. */
+			pinmux = <LEDC_CH0_GPIO27>,
+				 <LEDC_CH1_GPIO13>,
+				 <LEDC_CH2_GPIO4>,
+				 <LEDC_CH3_GPIO2>;
+			output-enable;
+		};
+	};
+};
+
+&ledc0 {
+	pinctrl-0 = <&dog_door_ledc>;
 };
