@@ -1,0 +1,75 @@
+/*
+ * Copyright (c) 2026 Grippy98
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <zephyr/dt-bindings/pinctrl/esp32-pinctrl.h>
+
+&pinctrl {
+	uart0_default: uart0_default {
+		group1 {
+			pinmux = <UART0_TX_GPIO1>;
+			output-high;
+		};
+
+		group2 {
+			pinmux = <UART0_RX_GPIO3>;
+			bias-pull-up;
+		};
+	};
+
+	i2c0_default: i2c0_default {
+		group1 {
+			pinmux = <I2C0_SDA_GPIO21>,
+				 <I2C0_SCL_GPIO22>;
+			bias-pull-up;
+			drive-open-drain;
+			output-high;
+		};
+	};
+
+	/* Dedicated four-LED WS2812 chain on GPIO16. */
+	spim2_ws2812: spim2_ws2812 {
+		group1 {
+			pinmux = <SPIM2_MOSI_GPIO16>;
+			output-low;
+		};
+	};
+
+	/* SPI expansion header: CS, SCLK, MISO and MOSI. */
+	spim3_default: spim3_default {
+		group1 {
+			pinmux = <SPIM3_MISO_GPIO19>,
+				 <SPIM3_SCLK_GPIO18>,
+				 <SPIM3_CSEL_GPIO5>;
+		};
+
+		group2 {
+			pinmux = <SPIM3_MOSI_GPIO23>;
+			output-low;
+		};
+	};
+
+	/*
+	 * Low-speed LEDC channels drive the four dual-input motor bridges.
+	 * High-speed channels drive the four servo headers.
+	 */
+	ledc0_default: ledc0_default {
+		group1 {
+			pinmux = <LEDC_CH0_GPIO27>,
+				 <LEDC_CH1_GPIO13>,
+				 <LEDC_CH2_GPIO4>,
+				 <LEDC_CH3_GPIO2>,
+				 <LEDC_CH4_GPIO17>,
+				 <LEDC_CH5_GPIO12>,
+				 <LEDC_CH6_GPIO14>,
+				 <LEDC_CH7_GPIO15>,
+				 <LEDC_CH8_GPIO32>,
+				 <LEDC_CH9_GPIO33>,
+				 <LEDC_CH10_GPIO26>,
+				 <LEDC_CH11_GPIO25>;
+			output-enable;
+		};
+	};
+};

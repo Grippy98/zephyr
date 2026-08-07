@@ -1,0 +1,19 @@
+identifier: maker_esp32/esp32/procpu
+name: Maker ESP32 PROCPU
+type: mcu
+arch: xtensa
+toolchain:
+  - zephyr
+supported:
+  - adc
+  - gpio
+  - i2c
+  - watchdog
+  - uart
+  - nvs
+  - pwm
+  - spi
+  - entropy
+  - led_strip
+  - netif:wifi
+vendor: nulllab

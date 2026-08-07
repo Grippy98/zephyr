@@ -1,0 +1,212 @@
+/*
+ * Copyright (c) 2026 Grippy98
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+/dts-v1/;
+
+#include <espressif/esp32/esp32_wroom_32ue_n4.dtsi>
+#include "maker_esp32-pinctrl.dtsi"
+#include <zephyr/dt-bindings/led/led.h>
+#include <espressif/partitions_0x1000_amp.dtsi>
+
+/ {
+	model = "NULLLAB Maker ESP32 PROCPU";
+	compatible = "nulllab,maker-esp32", "espressif,esp32-wroom-32e",
+		     "espressif,esp32";
+
+	aliases {
+		uart-0 = &uart0;
+		i2c-0 = &i2c0;
+		spi-0 = &spi3;
+		pwm-0 = &ledc0;
+		adc0 = &adc0;
+		led-strip = &rgb_leds;
+		watchdog0 = &wdt0;
+	};
+
+	chosen {
+		zephyr,sram = &sram1;
+		zephyr,console = &uart0;
+		zephyr,shell-uart = &uart0;
+		zephyr,flash = &flash0;
+		zephyr,code-partition = &slot0_partition;
+		zephyr,bt-hci = &esp32_bt_hci;
+	};
+
+	zephyr,user {
+		io-channels = <&adc0 6>, <&adc0 7>, <&adc0 3>, <&adc0 0>;
+		io-channel-names = "GPIO34", "GPIO35", "GPIO39", "GPIO36";
+	};
+};
+
+&uart0 {
+	status = "okay";
+	current-speed = <115200>;
+	pinctrl-0 = <&uart0_default>;
+	pinctrl-names = "default";
+};
+
+&gpio0 {
+	status = "okay";
+};
+
+&gpio1 {
+	status = "okay";
+};
+
+&adc0 {
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@0 {
+		reg = <0>;
+		zephyr,gain = "ADC_GAIN_1_4";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+
+	channel@3 {
+		reg = <3>;
+		zephyr,gain = "ADC_GAIN_1_4";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+
+	channel@6 {
+		reg = <6>;
+		zephyr,gain = "ADC_GAIN_1_4";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+
+	channel@7 {
+		reg = <7>;
+		zephyr,gain = "ADC_GAIN_1_4";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+};
+
+&i2c0 {
+	status = "okay";
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+	sda-gpios = <&gpio0 21 GPIO_OPEN_DRAIN>;
+	scl-gpios = <&gpio0 22 GPIO_OPEN_DRAIN>;
+	pinctrl-0 = <&i2c0_default>;
+	pinctrl-names = "default";
+};
+
+&spi2 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+	line-idle-low;
+	pinctrl-0 = <&spim2_ws2812>;
+	pinctrl-names = "default";
+
+	rgb_leds: ws2812@0 {
+		compatible = "worldsemi,ws2812-spi";
+		reg = <0>;
+		spi-max-frequency = <6400000>;
+		chain-length = <4>;
+		spi-one-frame = <0xfc>;
+		spi-zero-frame = <0xc0>;
+		color-mapping = <LED_COLOR_ID_GREEN
+				 LED_COLOR_ID_RED
+				 LED_COLOR_ID_BLUE>;
+	};
+};
+
+&spi3 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+	pinctrl-0 = <&spim3_default>;
+	pinctrl-names = "default";
+};
+
+&ledc0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+	pinctrl-0 = <&ledc0_default>;
+	pinctrl-names = "default";
+
+	motor_m1a_pwm: channel@0 {
+		reg = <0>;
+		timer = <0>;
+	};
+
+	motor_m1b_pwm: channel@1 {
+		reg = <1>;
+		timer = <0>;
+	};
+
+	motor_m2a_pwm: channel@2 {
+		reg = <2>;
+		timer = <0>;
+	};
+
+	motor_m2b_pwm: channel@3 {
+		reg = <3>;
+		timer = <0>;
+	};
+
+	motor_m3a_pwm: channel@4 {
+		reg = <4>;
+		timer = <0>;
+	};
+
+	motor_m3b_pwm: channel@5 {
+		reg = <5>;
+		timer = <0>;
+	};
+
+	motor_m4a_pwm: channel@6 {
+		reg = <6>;
+		timer = <0>;
+	};
+
+	motor_m4b_pwm: channel@7 {
+		reg = <7>;
+		timer = <0>;
+	};
+
+	servo1_pwm: channel@8 {
+		reg = <8>;
+		timer = <0>;
+	};
+
+	servo2_pwm: channel@9 {
+		reg = <9>;
+		timer = <0>;
+	};
+
+	servo3_pwm: channel@a {
+		reg = <10>;
+		timer = <0>;
+	};
+
+	servo4_pwm: channel@b {
+		reg = <11>;
+		timer = <0>;
+	};
+};
+
+&trng0 {
+	status = "okay";
+};
+
+&esp32_bt_hci {
+	status = "okay";
+};
+
+&wifi {
+	status = "okay";
+};

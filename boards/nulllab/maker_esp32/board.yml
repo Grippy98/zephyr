@@ -1,0 +1,6 @@
+board:
+  name: maker_esp32
+  full_name: Maker ESP32
+  vendor: nulllab
+  socs:
+  - name: esp32
