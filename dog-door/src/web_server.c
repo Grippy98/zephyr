@@ -49,42 +49,16 @@ struct ota_http_context {
 static uint8_t index_html_gz[] = {
 #include "index.html.gz.inc"
 };
-static uint8_t app_css_gz[] = {
-#include "app.css.gz.inc"
-};
-static uint8_t app_js_gz[] = {
-#include "app.js.gz.inc"
-};
 
 static struct http_resource_detail_static index_detail = {
 	.common = {
 		.type = HTTP_RESOURCE_TYPE_STATIC,
 		.bitmask_of_supported_http_methods = BIT(HTTP_GET),
 		.content_encoding = "gzip",
-		.content_type = "text/html",
+		.content_type = "text/html; charset=utf-8",
 	},
 	.static_data = index_html_gz,
 	.static_data_len = sizeof(index_html_gz),
-};
-static struct http_resource_detail_static css_detail = {
-	.common = {
-		.type = HTTP_RESOURCE_TYPE_STATIC,
-		.bitmask_of_supported_http_methods = BIT(HTTP_GET),
-		.content_encoding = "gzip",
-		.content_type = "text/css",
-	},
-	.static_data = app_css_gz,
-	.static_data_len = sizeof(app_css_gz),
-};
-static struct http_resource_detail_static js_detail = {
-	.common = {
-		.type = HTTP_RESOURCE_TYPE_STATIC,
-		.bitmask_of_supported_http_methods = BIT(HTTP_GET),
-		.content_encoding = "gzip",
-		.content_type = "text/javascript",
-	},
-	.static_data = app_js_gz,
-	.static_data_len = sizeof(app_js_gz),
 };
 
 static const struct http_header json_header[] = {
@@ -538,8 +512,6 @@ HTTP_SERVICE_DEFINE(dog_door_service, NULL, &port, CONFIG_HTTP_SERVER_MAX_CLIENT
 
 HTTP_RESOURCE_DEFINE(index_resource, dog_door_service, "/", &index_detail);
 HTTP_RESOURCE_DEFINE(setup_resource, dog_door_service, "/setup", &index_detail);
-HTTP_RESOURCE_DEFINE(css_resource, dog_door_service, "/app.css", &css_detail);
-HTTP_RESOURCE_DEFINE(js_resource, dog_door_service, "/app.js", &js_detail);
 HTTP_RESOURCE_DEFINE(state_resource, dog_door_service, "/api/state", &state_detail);
 HTTP_RESOURCE_DEFINE(door_resource, dog_door_service, "/api/door", &door_detail);
 HTTP_RESOURCE_DEFINE(led_resource, dog_door_service, "/api/led", &led_detail);
