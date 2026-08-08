@@ -9,7 +9,6 @@
 #include <zephyr/net/dhcpv4.h>
 #include <zephyr/net/dhcpv4_server.h>
 #include <zephyr/net/http/server.h>
-#include <zephyr/net/icmp.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/net_ip.h>
 #include <zephyr/net/net_mgmt.h>
@@ -26,9 +25,6 @@ LOG_MODULE_REGISTER(network, CONFIG_DOG_DOOR_LOG_LEVEL);
 #define RECONNECT_MAX_DELAY_SECONDS 30U
 #define CONNECT_ATTEMPT_TIMEOUT_SECONDS 35U
 #define FALLBACK_AP_DELAY K_SECONDS(30)
-#define LINK_MONITOR_INTERVAL K_SECONDS(10)
-#define LINK_MONITOR_MAX_MISSES 3U
-#define LINK_MONITOR_IDENTIFIER 0x4444U
 
 static struct network_snapshot state;
 static struct net_if *sta_iface;
@@ -38,8 +34,6 @@ static struct net_mgmt_event_callback ipv4_cb;
 static struct k_work_delayable startup_work;
 static struct k_work_delayable fallback_ap_work;
 static struct k_work_delayable reconnect_work;
-static struct k_work_delayable link_monitor_work;
-static struct net_icmp_ctx link_monitor_icmp;
 static struct wifi_connect_req_params station_params;
 static struct wifi_connect_req_params access_point_params;
 static char connect_ssid[WIFI_SSID_MAX_LEN + 1];
@@ -47,10 +41,6 @@ static char connect_password[WIFI_CREDENTIALS_MAX_PASSWORD_LEN + 1];
 static enum wifi_security_type connect_security = WIFI_SECURITY_TYPE_NONE;
 static uint32_t reconnect_delay_seconds = RECONNECT_INITIAL_DELAY_SECONDS;
 static bool restart_requested;
-static bool link_monitor_ready;
-static bool gateway_ping_pending;
-static uint8_t gateway_ping_misses;
-static uint16_t gateway_ping_sequence;
 K_MUTEX_DEFINE(network_lock);
 
 static void bump_generation(void)
@@ -282,96 +272,6 @@ static void reconnect_handler(struct k_work *work)
 	}
 }
 
-static enum net_verdict gateway_ping_reply(struct net_icmp_ctx *ctx,
-					   struct net_pkt *pkt,
-					   struct net_icmp_ip_hdr *ip_hdr,
-					   struct net_icmp_hdr *icmp_hdr,
-					   void *user_data)
-{
-	ARG_UNUSED(ctx);
-	ARG_UNUSED(pkt);
-	ARG_UNUSED(ip_hdr);
-	ARG_UNUSED(icmp_hdr);
-	ARG_UNUSED(user_data);
-
-	k_mutex_lock(&network_lock, K_FOREVER);
-	gateway_ping_pending = false;
-	gateway_ping_misses = 0;
-	k_mutex_unlock(&network_lock);
-	return NET_OK;
-}
-
-static void link_monitor_handler(struct k_work *work)
-{
-	struct sockaddr_in gateway = {
-		.sin_family = AF_INET,
-	};
-	struct net_icmp_ping_params params = {
-		.identifier = LINK_MONITOR_IDENTIFIER,
-		.data_size = 8,
-	};
-	bool connected;
-	bool restart = false;
-	uint8_t misses = 0;
-	int ret;
-
-	ARG_UNUSED(work);
-	k_mutex_lock(&network_lock, K_FOREVER);
-	connected = state.connected;
-	if (!connected) {
-		gateway_ping_pending = false;
-		gateway_ping_misses = 0;
-	} else if (gateway_ping_pending) {
-		gateway_ping_misses++;
-		misses = gateway_ping_misses;
-		if (gateway_ping_misses >= LINK_MONITOR_MAX_MISSES) {
-			state.connected = false;
-			state.connecting = false;
-			state.ip_address[0] = '\0';
-			gateway_ping_pending = false;
-			bump_generation();
-			restart = true;
-		}
-	}
-	k_mutex_unlock(&network_lock);
-
-	if (misses > 0U) {
-		LOG_WRN("Wi-Fi gateway probe missed (%u/%u)", misses,
-			LINK_MONITOR_MAX_MISSES);
-	}
-	if (restart) {
-		LOG_WRN("Wi-Fi link is stale; restarting station");
-		(void)net_mgmt(NET_REQUEST_WIFI_DISCONNECT, sta_iface, NULL, 0);
-		schedule_reconnect();
-		k_work_schedule(&fallback_ap_work, FALLBACK_AP_DELAY);
-		goto reschedule;
-	}
-	if (!connected || !link_monitor_ready) {
-		goto reschedule;
-	}
-
-	gateway.sin_addr = net_if_ipv4_get_gw(sta_iface);
-	if (net_ipv4_is_addr_unspecified(&gateway.sin_addr)) {
-		goto reschedule;
-	}
-	k_mutex_lock(&network_lock, K_FOREVER);
-	params.sequence = ++gateway_ping_sequence;
-	gateway_ping_pending = true;
-	k_mutex_unlock(&network_lock);
-	ret = net_icmp_send_echo_request_no_wait(&link_monitor_icmp, sta_iface,
-						 (struct net_sockaddr *)&gateway,
-						 &params, NULL);
-	if (ret != 0) {
-		k_mutex_lock(&network_lock, K_FOREVER);
-		gateway_ping_pending = false;
-		k_mutex_unlock(&network_lock);
-		LOG_WRN("Wi-Fi gateway probe could not be sent: %d", ret);
-	}
-
-reschedule:
-	k_work_reschedule(&link_monitor_work, LINK_MONITOR_INTERVAL);
-}
-
 static void insert_scan_result(const struct wifi_scan_result *result)
 {
 	size_t index;
@@ -442,8 +342,6 @@ static void wifi_event_handler(struct net_mgmt_event_callback *cb,
 		state.connected = false;
 		state.connecting = false;
 		state.ip_address[0] = '\0';
-		gateway_ping_pending = false;
-		gateway_ping_misses = 0;
 		request_fallback = true;
 		request_reconnect = true;
 		stop_http_server = true;
@@ -516,8 +414,6 @@ static void ipv4_event_handler(struct net_mgmt_event_callback *cb,
 	state.connected = true;
 	state.connecting = false;
 	reconnect_delay_seconds = RECONNECT_INITIAL_DELAY_SECONDS;
-	gateway_ping_pending = false;
-	gateway_ping_misses = 0;
 	ap_active = state.ap_active;
 	bump_generation();
 	LOG_INF("Dashboard available at http://%s/", state.ip_address);
@@ -557,8 +453,6 @@ static void startup_handler(struct k_work *work)
 
 int network_manager_init(void)
 {
-	int ret;
-
 	sta_iface = net_if_get_wifi_sta();
 	ap_iface = net_if_get_wifi_sap();
 	if (sta_iface == NULL || ap_iface == NULL) {
@@ -568,15 +462,6 @@ int network_manager_init(void)
 	k_work_init_delayable(&startup_work, startup_handler);
 	k_work_init_delayable(&fallback_ap_work, fallback_ap_handler);
 	k_work_init_delayable(&reconnect_work, reconnect_handler);
-	k_work_init_delayable(&link_monitor_work, link_monitor_handler);
-	ret = net_icmp_init_ctx(&link_monitor_icmp, NET_AF_INET,
-				NET_ICMPV4_ECHO_REPLY, 0, gateway_ping_reply);
-	if (ret != 0) {
-		LOG_WRN("Wi-Fi gateway monitor initialization failed: %d", ret);
-	} else {
-		link_monitor_ready = true;
-		k_work_schedule(&link_monitor_work, LINK_MONITOR_INTERVAL);
-	}
 	net_mgmt_init_event_callback(&wifi_cb, wifi_event_handler, WIFI_EVENTS);
 	net_mgmt_add_event_callback(&wifi_cb);
 	net_mgmt_init_event_callback(&ipv4_cb, ipv4_event_handler, NET_EVENT_IPV4_ADDR_ADD);
@@ -637,7 +522,6 @@ int network_manager_set_wifi(const char *ssid, const char *password,
 	if (ret != 0) {
 		return ret;
 	}
-	k_work_cancel_delayable(&reconnect_work);
 	k_work_cancel_delayable(&fallback_ap_work);
 	k_mutex_lock(&network_lock, K_FOREVER);
 	memcpy(connect_ssid, ssid, ssid_len + 1);
@@ -649,7 +533,12 @@ int network_manager_set_wifi(const char *ssid, const char *password,
 	k_mutex_unlock(&network_lock);
 
 	/* Let the HTTP response leave before a live station is disconnected. */
-	k_work_reschedule(&reconnect_work, K_MSEC(500));
+	ret = k_work_reschedule(&reconnect_work, K_MSEC(500));
+	if (ret < 0) {
+		LOG_ERR("Could not schedule Wi-Fi reconfiguration: %d", ret);
+		return ret;
+	}
+	LOG_INF("Wi-Fi reconfiguration scheduled");
 	return 0;
 }
 
