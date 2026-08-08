@@ -8,19 +8,32 @@ let formDirty = false;
 let pollTimer;
 let selectedFirmware = null;
 let otaUploadActive = false;
+let refreshPending = false;
+let apiQueue = Promise.resolve();
 
 function titleCase(value = "unknown") {
   return value.replace(/(^|_)([a-z])/g, (_, p, c) => `${p ? " " : ""}${c.toUpperCase()}`);
 }
 
-async function api(path, options = {}) {
-  const response = await fetch(path, {
-    ...options,
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+function api(path, options = {}) {
+  const request = apiQueue.then(async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch(path, {
+        ...options,
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
+      return payload;
+    } finally {
+      clearTimeout(timeout);
+    }
   });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
-  return payload;
+  apiQueue = request.catch(() => {});
+  return request;
 }
 
 function showToast(message) {
@@ -35,7 +48,6 @@ function setView(view) {
   document.body.dataset.view = view;
   $$('[data-view]').forEach((node) => { node.hidden = node.dataset.view !== view; });
   $$('[data-view-button]').forEach((button) => button.classList.toggle("active", button.dataset.viewButton === view));
-  if (view === "network") scanNetworks();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -126,6 +138,8 @@ function render(next) {
 }
 
 async function refresh() {
+  if (refreshPending || otaUploadActive) return;
+  refreshPending = true;
   try {
     const next = await api("/api/state");
     if (otaUploadActive && !next.ota.rebootPending) {
@@ -135,6 +149,8 @@ async function refresh() {
     render(next);
   } catch (error) {
     $("#last-update").textContent = "device offline";
+  } finally {
+    refreshPending = false;
   }
 }
 
@@ -270,5 +286,7 @@ $("#ota-file").addEventListener("change", (event) => {
 $("#ota-upload").addEventListener("click", uploadFirmware);
 
 setView(activeView);
-refresh();
-pollTimer = setInterval(refresh, 1000);
+setTimeout(() => {
+  refresh();
+  pollTimer = setInterval(refresh, 1000);
+}, 750);

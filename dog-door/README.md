@@ -73,6 +73,17 @@ On first boot the device creates `DogDoor-Setup` with password `configureme`.
 Connect to it and open `http://192.168.4.1/`. Change the setup password in
 Kconfig before deployment.
 
+After a station link loss, the application retries with bounded backoff from
+2 to 30 seconds. The setup access point is enabled only if the outage lasts 30
+seconds, avoiding AP/STA mode churn during brief interruptions. It also probes
+the local gateway and restarts a station connection that stops passing traffic
+without emitting a Wi-Fi disconnect event. Station power saving is disabled to
+keep this mains-powered controller reachable on access points that do not
+interoperate reliably with ESP32 modem sleep.
+
+The dashboard serializes API polling onto a reusable connection, and the HTTP
+listener is recreated after the station recovers from a link loss.
+
 ## Home Assistant
 
 Enable MQTT Discovery in the WebUI and configure the hostname or IP address of
