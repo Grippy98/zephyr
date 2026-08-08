@@ -22,6 +22,10 @@ LOG_MODULE_REGISTER(web, CONFIG_DOG_DOOR_LOG_LEVEL);
 
 #define API_BODY_MAX 768
 #define API_RESPONSE_MAX 3072
+#define HTTP_SERVER_REQUIRED_POLL_FDS (2 + CONFIG_HTTP_SERVER_MAX_CLIENTS)
+
+BUILD_ASSERT(CONFIG_ZVFS_POLL_MAX >= HTTP_SERVER_REQUIRED_POLL_FDS,
+	     "ZVFS poll capacity must cover the HTTP stop, listener, and client sockets");
 
 enum api_kind {
 	API_STATE,

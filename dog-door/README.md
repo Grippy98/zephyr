@@ -5,12 +5,13 @@ application serves a responsive local WebUI, provisions Wi-Fi through a setup
 access point, and exposes the door and onboard LEDs to Home Assistant using
 MQTT Discovery.
 
-## Safety defaults
+## Actuator safety
 
-Stepper motion is disabled by default. Build with
-`CONFIG_DOG_DOOR_ACTUATOR_ARMED=y` only after verifying the complete mechanism,
-switch wiring, winding pairs, opening direction, drive duty, step rate, and
-travel timeout.
+This deployment is built with `CONFIG_DOG_DOOR_ACTUATOR_ARMED=y`. The firmware
+still leaves every motor output off at boot and only energizes the stepper after
+an explicit Open, Close, or Home command. Verify the complete mechanism, switch
+wiring, winding pairs, opening direction, drive duty, step rate, and travel
+timeout before commanding motion.
 
 The default application overlay assumes:
 
@@ -79,8 +80,10 @@ seconds, avoiding AP/STA mode churn during brief interruptions. Station power
 saving is disabled to keep this mains-powered controller reachable on access
 points that do not interoperate reliably with ESP32 modem sleep.
 
-The dashboard serializes API polling onto a reusable connection, and the HTTP
-listener is recreated after the station recovers from a link loss.
+The dashboard serializes API polling onto a reusable connection. The HTTP poll
+set is sized for all configured clients, so a second browser or a new connection
+cannot exhaust the listener, and the listener is recreated after the station
+recovers from a link loss.
 
 ## Home Assistant
 
